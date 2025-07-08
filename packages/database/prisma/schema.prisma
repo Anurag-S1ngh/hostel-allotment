@@ -8,13 +8,13 @@ datasource db {
 }
 
 model Student {
-  id            String          @id @default(uuid())
-  username      String          @unique
-  email         String          @unique
-  password      String
-  cgpa          Float
-  allottedRooms AllottedRooms[]
-  groupMember   GroupMember?
+  id           String         @id @default(uuid())
+  username     String         @unique
+  email        String         @unique
+  password     String
+  cgpa         Float
+  allottedRoom AllottedRooms?
+  groupMember  GroupMember?
 }
 
 model Hostel {
@@ -29,7 +29,7 @@ model AllottedRooms {
   hostel     Hostel   @relation(fields: [hostelId], references: [id])
   hostelId   String
   student    Student  @relation(fields: [studentId], references: [id])
-  studentId  String
+  studentId  String   @unique
   room       Room     @relation(fields: [roomId], references: [id])
   roomId     String   @unique
   allottedAt DateTime @default(now())

@@ -6,25 +6,6 @@ import { WebSocket, WebSocketServer } from "ws";
 
 const wss = new WebSocketServer({ port: 8080 });
 
-// {
-//   id: 'f5a93ec1-1234-4d71-a8d0-9c9a47d5f111',
-//   name: 'Group A',
-//   members: [
-//     {
-//       id: 'b234acb9-5678-4567-a901-abc123456789',
-//       groupId: 'f5a93ec1-1234-4d71-a8d0-9c9a47d5f111',
-//       studentId: 'f891a7b0-1234-4d65-a321-0aa111ee2233',
-//       isGroupAdmin: true
-//     },
-//     {
-//       id: 'c111bb22-8888-42aa-bbbb-99dd33ff4444',
-//       groupId: 'f5a93ec1-1234-4d71-a8d0-9c9a47d5f111',
-//       studentId: 'e5416a21-9999-4aaa-8888-112233445566',
-//       isGroupAdmin: false
-//     }
-//   ]
-// }
-
 const userMap = new Map<string, WebSocket>();
 const groupQueue = new Map<string, any>();
 
@@ -98,6 +79,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
           return;
         }
 
+        // admin have to add hostelId and groups with it not hostelName
         groupQueue.set(parseData.hostel, parseData.groups);
 
         break;
@@ -115,6 +97,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             return true;
           }
         });
+
         console.log("isTurn: ", isTurn);
         if (!isTurn) {
           ws.send(

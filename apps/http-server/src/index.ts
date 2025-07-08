@@ -1,5 +1,5 @@
 import { prisma } from "@workspace/database/client";
-import bcrypt from "bcryptjs";
+import bcrypt, { compareSync } from "bcryptjs";
 import cors from "cors";
 import "dotenv/config";
 import express, { Request, Response } from "express";
@@ -261,5 +261,46 @@ app.delete(
     }
   },
 );
+
+app.get("/room", async (req: CustomExpressRequest, res: Response) => {
+  const userId = req.userId;
+  if (!userId) {
+    res.json({
+      msg: "sign in first",
+    });
+    return;
+  }
+  try {
+    const room = await prisma.allottedRooms.findFirst({
+      where: {
+        studentId: userId,
+      },
+      select: {
+        room: {
+          select: {
+            roomName: true,
+            capacity: true,
+          },
+        },
+        allottedAt: true,
+      },
+    });
+    if (!room) {
+      res.json({
+        msg: "no room found",
+      });
+      return;
+    }
+    res.json({
+      msg: "room found",
+      room,
+    });
+  } catch (error) {
+    console.log(error);
+    res.json({
+      msg: "try again later",
+    });
+  }
+});
 
 app.listen(3001);
