@@ -1,10 +1,12 @@
 import { prisma } from "@workspace/database/client";
-import "dotenv/config";
-import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import cors from "cors";
+import "dotenv/config";
 import express, { Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import { AuthMiddlware } from "./middleware/auth";
+import { getLatestCgpi } from "./scraper/scraper";
+import { CustomExpressRequest } from "./type/type";
 
 const app = express();
 app.use(express.json());
@@ -13,13 +15,30 @@ app.use(cors());
 app.post("/signup", async (req: Request, res: Response) => {
   const { email, password } = req.body;
   const hashPassword = await bcrypt.hash(password, 10);
+  const rollNumber = req.body.rollNumber.toLowerCase();
+  console.log(rollNumber);
+  let cgpa;
+  try {
+    cgpa = await getLatestCgpi(rollNumber);
+  } catch (error) {
+    res.json({
+      msg: "invalid roll number",
+    });
+    return;
+  }
+  if (!cgpa) {
+    res.json({
+      msg: "invalid roll number",
+    });
+    return;
+  }
   try {
     const user = await prisma.student.create({
       data: {
-        username: Math.random().toString(),
+        username: rollNumber,
         email,
         password: hashPassword,
-        cgpa: 9,
+        cgpa,
       },
     });
     res.json({
@@ -106,7 +125,7 @@ app.post("/admin/signin", async (req: Request, res: Response) => {
 app.post(
   "/group/create",
   AuthMiddlware,
-  async (req: Request, res: Response) => {
+  async (req: CustomExpressRequest, res: Response) => {
     const userId = req.userId;
     if (!userId) {
       res.json({
@@ -143,51 +162,55 @@ app.post(
   },
 );
 
-app.post("/group/join", AuthMiddlware, async (req: Request, res: Response) => {
-  const userId = req.userId;
-  if (!userId) {
-    res.json({
-      msg: "sign in first",
-    });
-    return;
-  }
-
-  const { groupName } = req.body;
-
-  try {
-    const group = await prisma.group.findFirst({
-      where: {
-        name: groupName,
-      },
-    });
-
-    if (!group) {
+app.post(
+  "/group/join",
+  AuthMiddlware,
+  async (req: CustomExpressRequest, res: Response) => {
+    const userId = req.userId;
+    if (!userId) {
       res.json({
-        msg: "group not found",
+        msg: "sign in first",
       });
       return;
     }
-    const groupMember = await prisma.groupMember.create({
-      data: {
-        groupId: group.id,
-        studentId: userId,
-      },
-    });
-    res.json({
-      msg: "group joined successfully",
-      groupMember,
-    });
-  } catch (error) {
-    res.json({
-      msg: "try again later",
-    });
-  }
-});
+
+    const { groupName } = req.body;
+
+    try {
+      const group = await prisma.group.findFirst({
+        where: {
+          name: groupName,
+        },
+      });
+
+      if (!group) {
+        res.json({
+          msg: "group not found",
+        });
+        return;
+      }
+      const groupMember = await prisma.groupMember.create({
+        data: {
+          groupId: group.id,
+          studentId: userId,
+        },
+      });
+      res.json({
+        msg: "group joined successfully",
+        groupMember,
+      });
+    } catch (error) {
+      res.json({
+        msg: "try again later",
+      });
+    }
+  },
+);
 
 app.delete(
   "/group/:groupId/remove",
   AuthMiddlware,
-  async (req: Request, res: Response) => {
+  async (req: CustomExpressRequest, res: Response) => {
     const userId = req.userId;
     if (!userId) {
       res.json({
