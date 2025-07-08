@@ -13,6 +13,7 @@ model Student {
   email        String         @unique
   password     String
   cgpa         Float
+  currentYear  Int
   allottedRoom AllottedRooms?
   groupMember  GroupMember?
 }

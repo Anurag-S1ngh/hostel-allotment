@@ -8,6 +8,7 @@ const wss = new WebSocketServer({ port: 8080 });
 
 const userMap = new Map<string, WebSocket>();
 const groupQueue = new Map<string, any>();
+const viewersMap = new Map<string, Set<WebSocket>>();
 
 wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   if (!req.url) {
@@ -179,6 +180,23 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             }),
           );
 
+          const watchers = viewersMap.get(hostelId);
+          if (watchers) {
+            const payload = JSON.stringify({
+              type: "update",
+              message: "Room selected",
+              roomId,
+              hostelId,
+              group: hostelQueue[0].members.map((m: any) => m.studentId),
+            });
+
+            for (const viewer of watchers) {
+              if (viewer.readyState === WebSocket.OPEN) {
+                viewer.send(payload);
+              }
+            }
+          }
+
           const newQueue = hostelQueue.slice(1);
           if (newQueue[0]) {
             newQueue[0].startTime = Date.now();
@@ -186,6 +204,30 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
           groupQueue.set(parseData.hostelId, newQueue);
           break;
 
+        case "subscribe":
+          const { hostelId: subHostelId } = parseData;
+          if (!subHostelId) {
+            ws.send(
+              JSON.stringify({
+                type: "subscribe",
+                message: "Hostel ID is required to subscribe",
+              }),
+            );
+            return;
+          }
+
+          if (!viewersMap.has(subHostelId)) {
+            viewersMap.set(subHostelId, new Set());
+          }
+          viewersMap.get(subHostelId)!.add(ws);
+
+          ws.send(
+            JSON.stringify({
+              type: "subscribe",
+              message: `Subscribed to hostel ${subHostelId}`,
+            }),
+          );
+          break;
         default:
           ws.send(
             JSON.stringify({
@@ -196,8 +238,13 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
           break;
       }
     });
+
     ws.on("close", () => {
       userMap.delete(userId);
+
+      for (const viewers of viewersMap.values()) {
+        viewers.delete(ws);
+      }
     });
   });
 

@@ -17,6 +17,10 @@ app.post("/signup", async (req: Request, res: Response) => {
   const hashPassword = await bcrypt.hash(password, 10);
   const rollNumber = req.body.rollNumber.toLowerCase();
   console.log(rollNumber);
+  const year = new Date().getFullYear();
+  //  24bcs023
+  const studentCurrentYear =
+    parseInt(year.toString().slice(-2)) - parseInt(rollNumber.slice(0, 2));
   let cgpa;
   try {
     cgpa = await getLatestCgpi(rollNumber);
@@ -39,6 +43,7 @@ app.post("/signup", async (req: Request, res: Response) => {
         email,
         password: hashPassword,
         cgpa,
+        currentYear: studentCurrentYear,
       },
     });
     res.json({
@@ -311,7 +316,7 @@ app.post("/room/auto-fill", async (req: Request, res: Response) => {
     });
     return;
   }
-  const { hostelId } = req.body;
+  const { hostelId, forStudentYear } = req.body;
   try {
     const admin = await prisma.admin.findFirst({
       where: {
@@ -340,6 +345,7 @@ app.post("/room/auto-fill", async (req: Request, res: Response) => {
     const studentsWithoutRoom = await prisma.student.findMany({
       where: {
         allottedRoom: null,
+        currentYear: forStudentYear - 1,
       },
       include: {
         groupMember: {
