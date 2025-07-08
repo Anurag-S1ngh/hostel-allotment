@@ -180,6 +180,12 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             }),
           );
 
+          const newQueue = hostelQueue.slice(1);
+          if (newQueue[0]) {
+            newQueue[0].startTime = Date.now();
+          }
+          groupQueue.set(parseData.hostelId, newQueue);
+
           const watchers = viewersMap.get(hostelId);
           if (watchers) {
             const payload = JSON.stringify({
@@ -191,17 +197,10 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             });
 
             for (const viewer of watchers) {
-              if (viewer.readyState === WebSocket.OPEN) {
-                viewer.send(payload);
-              }
+              viewer.send(payload);
             }
           }
 
-          const newQueue = hostelQueue.slice(1);
-          if (newQueue[0]) {
-            newQueue[0].startTime = Date.now();
-          }
-          groupQueue.set(parseData.hostelId, newQueue);
           break;
 
         case "subscribe":
@@ -228,6 +227,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             }),
           );
           break;
+
         default:
           ws.send(
             JSON.stringify({
