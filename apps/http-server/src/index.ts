@@ -1,5 +1,5 @@
 import { prisma } from "@workspace/database/client";
-import bcrypt, { compareSync } from "bcryptjs";
+import bcrypt from "bcryptjs";
 import cors from "cors";
 import "dotenv/config";
 import express, { Request, Response } from "express";
@@ -300,6 +300,151 @@ app.get("/room", async (req: CustomExpressRequest, res: Response) => {
     res.json({
       msg: "try again later",
     });
+  }
+});
+
+app.post("/room/auto-fill", async (req: Request, res: Response) => {
+  const userId = req.userId;
+  if (!userId) {
+    res.json({
+      msg: "sign in first",
+    });
+    return;
+  }
+  const { hostelId } = req.body;
+  try {
+    const admin = await prisma.admin.findFirst({
+      where: {
+        id: userId,
+      },
+    });
+    if (!admin) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+
+    const rooms = await prisma.room.findMany({
+      where: {
+        hostelId,
+      },
+      include: {
+        AllottedRooms: true,
+      },
+    });
+
+    const emptyRooms = rooms.filter((r) => r.AllottedRooms.length === 0);
+    const partiallyFilledRooms = rooms.filter(
+      (r) => r.AllottedRooms.length > 0 && r.AllottedRooms.length < r.capacity,
+    );
+
+    const studentsWithoutRoom = await prisma.student.findMany({
+      where: {
+        allottedRoom: null,
+      },
+      include: {
+        groupMember: {
+          include: {
+            group: {
+              include: {
+                members: {
+                  include: {
+                    student: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const assignedStudentIds = new Set<string>();
+
+    const processedGroupIds = new Set<string>();
+
+    for (const student of studentsWithoutRoom) {
+      const group = student.groupMember?.group;
+      if (!group) continue;
+      if (processedGroupIds.has(group.id)) continue;
+
+      const groupStudents = group.members
+        .map((m) => m.student)
+        .filter((s) => !assignedStudentIds.has(s.id));
+
+      const neededCapacity = groupStudents.length;
+      const room = emptyRooms.find((r) => r.capacity >= neededCapacity);
+      if (!room) continue;
+
+      for (const s of groupStudents) {
+        await prisma.allottedRooms.create({
+          data: {
+            hostelId,
+            roomId: room.id,
+            studentId: s.id,
+          },
+        });
+        assignedStudentIds.add(s.id);
+      }
+
+      processedGroupIds.add(group.id);
+
+      const roomIndex = emptyRooms.findIndex((r) => r.id === room.id);
+      if (roomIndex !== -1) emptyRooms.splice(roomIndex, 1);
+    }
+
+    const remainingStudents = studentsWithoutRoom.filter(
+      (s) => !assignedStudentIds.has(s.id),
+    );
+
+    for (const room of partiallyFilledRooms) {
+      const currentCount = room.AllottedRooms.length;
+      const slotsLeft = room.capacity - currentCount;
+
+      const fillers = remainingStudents
+        .filter((s) => !assignedStudentIds.has(s.id))
+        .slice(0, slotsLeft);
+
+      for (const student of fillers) {
+        await prisma.allottedRooms.create({
+          data: {
+            hostelId,
+            roomId: room.id,
+            studentId: student.id,
+          },
+        });
+        assignedStudentIds.add(student.id);
+      }
+    }
+
+    const stillRemainingStudents = remainingStudents.filter(
+      (s) => !assignedStudentIds.has(s.id),
+    );
+
+    for (const room of emptyRooms) {
+      const slotsLeft = room.capacity;
+
+      const fillers = stillRemainingStudents
+        .filter((s) => !assignedStudentIds.has(s.id))
+        .slice(0, slotsLeft);
+
+      for (const student of fillers) {
+        await prisma.allottedRooms.create({
+          data: {
+            hostelId,
+            roomId: room.id,
+            studentId: student.id,
+          },
+        });
+        assignedStudentIds.add(student.id);
+      }
+    }
+
+    res
+      .status(200)
+      .json({ message: "Room allocation completed successfully." });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "internal server error" });
   }
 });
 

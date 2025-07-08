@@ -12,149 +12,194 @@ const groupQueue = new Map<string, any>();
 wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   if (!req.url) {
     console.log("no url");
-    ws.close(1008, "Authentication token required");
+    ws.close();
     return;
   }
 
   const token = req.url.split("token=")[1];
   if (!token) {
     console.log("no token");
-    ws.close(1008, "Authentication token required");
+    ws.close();
     return;
   }
 
   jwt.verify(token, process.env.JWT_SECRET!, (err: any, decoded: any) => {
     if (err) {
       console.log("error", err);
-      ws.close(1008, "Invalid or expired token");
+      ws.close();
+      return;
+    }
+
+    if (!decoded?.userId) {
+      ws.close();
       return;
     }
 
     const userId = decoded.userId;
 
     userMap.set(userId, ws);
-    ws.send(
-      JSON.stringify({
-        type: "system",
-        message: "Welcome!",
-        username: userId,
-      }),
-    );
-  });
 
-  ws.on("message", async (data) => {
-    const parseData = JSON.parse(data.toString());
-
-    let userId: string | undefined;
-    for (const [key, value] of userMap.entries()) {
-      if (value === ws) {
-        userId = key;
-      }
-    }
-
-    if (!userId) {
-      ws.send(
-        JSON.stringify({
-          type: "system",
-          message: "You are not in the queue or not group admin",
-        }),
-      );
-      return;
-    }
-
-    switch (parseData.type) {
-      case "initialise":
-        const admin = await prisma.admin.findFirst({
-          where: {
-            id: userId,
-          },
-        });
-        if (!admin) {
-          ws.send(
-            JSON.stringify({
-              type: "initialise",
-              message: "User not found",
-            }),
-          );
-          return;
-        }
-
-        // admin have to add hostelId and groups with it not hostelName
-        groupQueue.set(parseData.hostel, parseData.groups);
-
-        break;
-
-      case "room-selected":
-        //hostel
-        //roomId
-        //hostelId
-        const hostelQueue = groupQueue.get(parseData.hostel);
-
-        console.log(hostelQueue);
-        console.log("flag 1");
-        const isTurn = hostelQueue?.[0]?.members.find((e: any) => {
-          if (e.studentId === userId && e.isGroupAdmin) {
-            return true;
-          }
-        });
-
-        console.log("isTurn: ", isTurn);
-        if (!isTurn) {
-          ws.send(
-            JSON.stringify({
-              type: "room-selected",
-              message: "You are not in the queue or not group admin",
-            }),
-          );
-          return;
-        }
-
-        const { roomId, hostelId } = parseData;
-
-        const roomExists = await prisma.allottedRooms.findFirst({
-          where: {
-            roomId,
-            hostelId,
-          },
-        });
-
-        if (roomExists) {
-          ws.send(
-            JSON.stringify({
-              type: "room-selected",
-              message: "Room already allotted",
-            }),
-          );
-          return;
-        }
-
-        for (const member of hostelQueue[0].members) {
-          await prisma.allottedRooms.create({
-            data: {
-              hostelId,
-              studentId: member.id,
-              roomId,
-            },
-          });
-        }
-
+    ws.on("message", async (data) => {
+      let parseData;
+      try {
+        parseData = JSON.parse(data.toString());
+      } catch (error) {
+        console.log(error);
         ws.send(
           JSON.stringify({
-            type: "room-selected",
-            message: "Room selected",
-            roomId,
-            hostel: hostelId,
+            type: "system",
+            message: "Invalid data",
           }),
         );
-        groupQueue.set(parseData.hostel, hostelQueue.slice(1));
-        console.log(groupQueue.get("KBH"));
-        break;
+        return;
+      }
 
-      default:
-        break;
-    }
+      switch (parseData.type) {
+        case "initialise":
+          const admin = await prisma.admin.findFirst({
+            where: {
+              id: userId,
+            },
+          });
+          if (!admin) {
+            ws.send(
+              JSON.stringify({
+                type: "initialise",
+                message: "User not found",
+              }),
+            );
+            return;
+          }
+
+          // admin have to add hostelId and groups with it not hostelName
+          groupQueue.set(
+            parseData.hostelId,
+            parseData.groups.map((e: any, index: number) => {
+              return {
+                startTime: index == 0 ? Date.now() : null,
+                members: e.members,
+              };
+            }),
+          );
+
+          break;
+
+        case "room-selected":
+          const hostelQueue = groupQueue.get(parseData.hostelId);
+
+          if (!hostelQueue || !hostelQueue[0]) {
+            ws.send(
+              JSON.stringify({
+                type: "room-selected",
+                message: "Queue not found",
+              }),
+            );
+            return;
+          }
+
+          console.log(hostelQueue);
+
+          const currentGroup = hostelQueue[0];
+          const elapsedTime = Date.now() - currentGroup.startTime;
+
+          console.log("elapsedTime: ", elapsedTime);
+
+          let canSelect = false;
+
+          if (elapsedTime <= 2 * 60 * 1000) {
+            canSelect = currentGroup.members.some(
+              (e: any) => e.studentId === userId && e.isGroupAdmin,
+            );
+          } else if (elapsedTime <= 4 * 60 * 1000) {
+            canSelect = currentGroup.members.some(
+              (e: any) => e.studentId === userId,
+            );
+          } else {
+            const newQueue = hostelQueue.slice(1);
+            if (newQueue[0]) {
+              newQueue[0].startTime = Date.now();
+            }
+            groupQueue.set(parseData.hostelId, newQueue);
+            ws.send(
+              JSON.stringify({
+                type: "room-selected",
+                message:
+                  "Time expired: Your group has been removed from the queue",
+              }),
+            );
+            return;
+          }
+
+          console.log("isTurn: ", canSelect);
+          if (!canSelect) {
+            ws.send(
+              JSON.stringify({
+                type: "room-selected",
+                message: "You are not in the queue or not group admin",
+              }),
+            );
+            return;
+          }
+
+          const { roomId, hostelId } = parseData;
+
+          const roomExists = await prisma.allottedRooms.findFirst({
+            where: {
+              roomId,
+              hostelId,
+            },
+          });
+
+          if (roomExists) {
+            ws.send(
+              JSON.stringify({
+                type: "room-selected",
+                message: "Room already allotted",
+              }),
+            );
+            return;
+          }
+
+          for (const member of hostelQueue[0].members) {
+            await prisma.allottedRooms.create({
+              data: {
+                hostelId,
+                studentId: member.id,
+                roomId,
+              },
+            });
+          }
+
+          ws.send(
+            JSON.stringify({
+              type: "room-selected",
+              message: "Room selected",
+              roomId,
+              hostel: hostelId,
+            }),
+          );
+
+          const newQueue = hostelQueue.slice(1);
+          if (newQueue[0]) {
+            newQueue[0].startTime = Date.now();
+          }
+          groupQueue.set(parseData.hostelId, newQueue);
+          break;
+
+        default:
+          ws.send(
+            JSON.stringify({
+              type: "error",
+              message: "Unknown message type",
+            }),
+          );
+          break;
+      }
+    });
+    ws.on("close", () => {
+      userMap.delete(userId);
+    });
   });
 
-  ws.send("something");
   ws.on("error", console.error);
 });
