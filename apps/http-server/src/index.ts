@@ -10,7 +10,7 @@ import {
   groupCreateSchema,
   groupJoinSchema,
   groupRemoveSchema,
-} from "./schema";
+} from "./ZodSchema/schema";
 
 interface AuthedRequest extends Request {
   userId: string;
