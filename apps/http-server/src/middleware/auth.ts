@@ -17,7 +17,11 @@ export function AuthMiddlware(req: Request, res: Response, next: NextFunction) {
     });
     return;
   }
-  req.userId = decodedData.userId;
+  (req as any).userId = decodedData.userId;
   next();
   return;
+}
+
+export interface AuthedRequest extends Request {
+  userId: string;
 }

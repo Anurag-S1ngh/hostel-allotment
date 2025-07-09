@@ -5,6 +5,17 @@ import "dotenv/config";
 import express, { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { AuthMiddlware } from "./middleware/auth";
+import {
+  authSchema,
+  groupCreateSchema,
+  groupJoinSchema,
+  groupRemoveSchema,
+} from "./ZodSchema/schema";
+
+interface AuthedRequest extends Request {
+  userId: string;
+}
+
 import { getLatestCgpi } from "./scraper/scraper";
 import { CustomExpressRequest } from "./type/type";
 
@@ -13,7 +24,13 @@ app.use(express.json());
 app.use(cors());
 
 app.post("/signup", async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const parsed = authSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten().fieldErrors }) ;
+    return;
+    }
+
+  const { email, password } = parsed.data;
   const hashPassword = await bcrypt.hash(password, 10);
   const rollNumber = req.body.rollNumber.toLowerCase();
   console.log(rollNumber);
@@ -46,84 +63,53 @@ app.post("/signup", async (req: Request, res: Response) => {
         currentYear: studentCurrentYear,
       },
     });
-    res.json({
-      msg: "sign up successful",
-      user,
-    });
+    res.status(201).json({ message: "Signup successful", user });
   } catch (error) {
-    console.log(error);
-    res.json({
-      msg: "try again later",
-    });
+    console.error("signup error", error);
+    res.status(500).json({ message: "Signup failed. Try again later." });
   }
-  return;
 });
 
 app.post("/signin", async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const parsed = authSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten().fieldErrors });
+    return;
+  }
+
+  const { email, password } = parsed.data;
   try {
-    const user = await prisma.student.findFirst({
-      where: {
-        email,
-      },
-    });
-    if (!user) {
-      res.json({
-        msg: "user not found",
-      });
-      return;
-    }
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-      res.json({
-        msg: "invalid password",
-      });
-      return;
-    }
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!);
-    res.json({
-      msg: "sign in successful",
-      token,
-    });
-  } catch (error) {
-    res.json({
-      msg: "try again later",
-    });
+    const user = await prisma.student.findFirst({ where: { email } });
+    if (!user)  res.status(404).json({ message: "User not found" });
+
+    const isValid = await bcrypt.compare(password, user!.password);
+    if (!isValid) res.status(401).json({ message: "Incorrect password" });
+
+    const token = jwt.sign({ userId: user!.id }, process.env.JWT_SECRET!);
+    res.status(200).json({ message: "Signin successful", token });
+  } catch {
+    
+    res.status(500).json({ message: "Signin failed. Try again later." });
   }
 });
 
 app.post("/admin/signin", async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const parsed = authSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten().fieldErrors });
+  return;
+  }
+
+  const { email, password } = parsed.data;
   try {
-    const user = await prisma.admin.findFirst({
-      where: {
-        email,
-      },
-    });
-    if (!user) {
-      res.json({
-        msg: "unauthorized",
-      });
-      return;
-    }
-    const isValidPassword = user.password === password;
-    if (!isValidPassword) {
-      res.json({
-        msg: "invalid password",
-      });
-      return;
-    }
+    const admin = await prisma.admin.findFirst({ where: { email } });
+    if (!admin)  res.status(401).json({ message: "Unauthorized: Admin not found" });
+    if (admin!.password !== password)  res.status(401).json({ message: "Incorrect password" });
 
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!);
-
-    res.json({
-      msg: "sign in successful",
-      token,
-    });
-  } catch (error) {
-    res.json({
-      msg: "try again later",
-    });
+    const token = jwt.sign({ userId: admin!.id }, process.env.JWT_SECRET!);
+    res.status(200).json({ message: "Admin signin successful", token });
+  } catch {
+    res.status(500).json({ message: "Signin failed. Try again later." });
   }
 });
 
@@ -212,61 +198,39 @@ app.post(
   },
 );
 
-app.delete(
-  "/group/:groupId/remove",
-  AuthMiddlware,
-  async (req: CustomExpressRequest, res: Response) => {
-    const userId = req.userId;
-    if (!userId) {
-      res.json({
-        msg: "sign in first",
-      });
-      return;
-    }
 
-    const groupId = req.params.groupId;
-    const { memberId } = req.body;
+app.delete("/group/:groupId/remove", AuthMiddlware, async (req: Request, res: Response) => {
+  const parsed = groupRemoveSchema.safeParse(req.body);
+  if (!parsed.success)  res.status(400).json({ message: "Invalid member ID" });
+  const data = parsed.data!;
 
-    try {
-      const user = await prisma.groupMember.findFirst({
-        where: {
-          studentId: userId,
-          groupId,
-        },
-      });
+  const userId = (req as any).userId;
+  if (!userId)  res.status(401).json({ message: "Unauthorized" });
 
-      if (!user) {
-        res.json({
-          msg: "user not found",
-        });
-        return;
-      }
+  const groupId = req.params.groupId;
+  const memberId = data.memberId;
 
-      if (!user.isGroupAdmin) {
-        res.json({
-          msg: "you are not an admin",
-        });
-        return;
-      }
+  try {
+    const admin = await prisma.groupMember.findFirst({
+      where: { studentId: userId, groupId },
+    });
 
-      const removedMember = await prisma.groupMember.delete({
-        where: {
-          studentId: memberId,
-          groupId,
-        },
-      });
-      res.json({
-        msg: "group member removed successfully",
-        removedMember,
-      });
-    } catch (error) {
-      res.json({
-        msg: "try again later",
-      });
-    }
-  },
-);
+    if (!admin)  res.status(404).json({ message: "You are not in this group" });
+    if (!admin!.isGroupAdmin)  res.status(403).json({ message: "You are not the group admin" });
 
+    await prisma.groupMember.delete({
+      where: { studentId: memberId },
+    });
+
+    res.status(200).json({ message: "Member removed from group" });
+  } catch {
+    res.status(500).json({ message: "Remove failed. Try again." });
+  }
+});
+
+app.listen(3001, () => {
+  console.log("Server running on http://localhost:3001");
+});
 app.get("/room", async (req: CustomExpressRequest, res: Response) => {
   const userId = req.userId;
   if (!userId) {
@@ -339,9 +303,9 @@ app.post(
         },
       });
 
-      const emptyRooms = rooms.filter((r) => r.AllottedRooms.length === 0);
+      const emptyRooms = rooms.filter((r: any) => r.AllottedRooms.length === 0);
       const partiallyFilledRooms = rooms.filter(
-        (r) =>
+        (r: any) =>
           r.AllottedRooms.length > 0 && r.AllottedRooms.length < r.capacity,
       );
 
@@ -377,11 +341,11 @@ app.post(
         if (processedGroupIds.has(group.id)) continue;
 
         const groupStudents = group.members
-          .map((m) => m.student)
-          .filter((s) => !assignedStudentIds.has(s.id));
+          .map((m: any) => m.student)
+          .filter((s: any) => !assignedStudentIds.has(s.id));
 
         const neededCapacity = groupStudents.length;
-        const room = emptyRooms.find((r) => r.capacity >= neededCapacity);
+        const room = emptyRooms.find((r: any) => r.capacity >= neededCapacity);
         if (!room) continue;
 
         for (const s of groupStudents) {
@@ -397,12 +361,12 @@ app.post(
 
         processedGroupIds.add(group.id);
 
-        const roomIndex = emptyRooms.findIndex((r) => r.id === room.id);
+        const roomIndex = emptyRooms.findIndex((r: any) => r.id === room.id);
         if (roomIndex !== -1) emptyRooms.splice(roomIndex, 1);
       }
 
       const remainingStudents = studentsWithoutRoom.filter(
-        (s) => !assignedStudentIds.has(s.id),
+        (s: any) => !assignedStudentIds.has(s.id),
       );
 
       for (const room of partiallyFilledRooms) {
@@ -410,7 +374,7 @@ app.post(
         const slotsLeft = room.capacity - currentCount;
 
         const fillers = remainingStudents
-          .filter((s) => !assignedStudentIds.has(s.id))
+          .filter((s: any) => !assignedStudentIds.has(s.id))
           .slice(0, slotsLeft);
 
         for (const student of fillers) {
@@ -426,14 +390,14 @@ app.post(
       }
 
       const stillRemainingStudents = remainingStudents.filter(
-        (s) => !assignedStudentIds.has(s.id),
+        (s: any) => !assignedStudentIds.has(s.id),
       );
 
       for (const room of emptyRooms) {
         const slotsLeft = room.capacity;
 
         const fillers = stillRemainingStudents
-          .filter((s) => !assignedStudentIds.has(s.id))
+          .filter((s: any) => !assignedStudentIds.has(s.id))
           .slice(0, slotsLeft);
 
         for (const student of fillers) {

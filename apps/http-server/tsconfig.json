@@ -1,7 +1,9 @@
 {
-  "extends": "@workspace/typescript-config/base.json",
+"extends": "../../packages/typescript-config/base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "typeRoots": ["./src/types", "../../node_modules/@types"]
+
   }
 }

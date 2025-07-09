@@ -40,7 +40,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
     userMap.set(userId, ws);
 
-    ws.on("message", async (data) => {
+    ws.on("message", async (data: any) => {
       let parseData;
       try {
         parseData = JSON.parse(data.toString());
@@ -50,7 +50,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
           JSON.stringify({
             type: "system",
             message: "Invalid data",
-          }),
+          })
         );
         return;
       }
@@ -67,22 +67,29 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
               JSON.stringify({
                 type: "initialise",
                 message: "User not found",
-              }),
+              })
             );
             return;
           }
 
-          // admin have to add hostelId and groups with it not hostelName
-          groupQueue.set(
-            parseData.hostelId,
-            parseData.groups.map((e: any, index: number) => {
+          const sortedGroups = parseData.groups
+            .sort((a: any, b: any) => {
+              const maxCgpaA = Math.max(
+                ...a.members.map((m: any) => m.cgpa || 0)
+              );
+              const maxCgpaB = Math.max(
+                ...b.members.map((m: any) => m.cgpa || 0)
+              );
+              return maxCgpaB - maxCgpaA; // descending
+            })
+            .map((e: any, index: number) => {
               return {
-                startTime: index == 0 ? Date.now() : null,
+                startTime: index === 0 ? Date.now() : null,
                 members: e.members,
               };
-            }),
-          );
+            });
 
+          groupQueue.set(parseData.hostelId, sortedGroups);
           break;
 
         case "room-selected":
@@ -93,7 +100,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
               JSON.stringify({
                 type: "room-selected",
                 message: "Queue not found",
-              }),
+              })
             );
             return;
           }
@@ -109,11 +116,11 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
           if (elapsedTime <= 2 * 60 * 1000) {
             canSelect = currentGroup.members.some(
-              (e: any) => e.studentId === userId && e.isGroupAdmin,
+              (e: any) => e.studentId === userId && e.isGroupAdmin
             );
           } else if (elapsedTime <= 4 * 60 * 1000) {
             canSelect = currentGroup.members.some(
-              (e: any) => e.studentId === userId,
+              (e: any) => e.studentId === userId
             );
           } else {
             const newQueue = hostelQueue.slice(1);
@@ -126,7 +133,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
                 type: "room-selected",
                 message:
                   "Time expired: Your group has been removed from the queue",
-              }),
+              })
             );
             return;
           }
@@ -137,7 +144,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
               JSON.stringify({
                 type: "room-selected",
                 message: "You are not in the queue or not group admin",
-              }),
+              })
             );
             return;
           }
@@ -156,7 +163,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
               JSON.stringify({
                 type: "room-selected",
                 message: "Room already allotted",
-              }),
+              })
             );
             return;
           }
@@ -177,7 +184,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
               message: "Room selected",
               roomId,
               hostel: hostelId,
-            }),
+            })
           );
 
           const newQueue = hostelQueue.slice(1);
@@ -210,7 +217,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
               JSON.stringify({
                 type: "subscribe",
                 message: "Hostel ID is required to subscribe",
-              }),
+              })
             );
             return;
           }
@@ -224,7 +231,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             JSON.stringify({
               type: "subscribe",
               message: `Subscribed to hostel ${subHostelId}`,
-            }),
+            })
           );
           break;
 
@@ -233,7 +240,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             JSON.stringify({
               type: "error",
               message: "Unknown message type",
-            }),
+            })
           );
           break;
       }
