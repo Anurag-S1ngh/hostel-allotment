@@ -77,3 +77,11 @@ export const roomUpdateSchema = z.object({
   roomName: z.string({ required_error: "Room name is required" }),
   capacity: z.number({ required_error: "Capacity is required" }),
 });
+
+export const hostelCreateSchema = z.object({
+  hostelName: z.string({ required_error: "Hostel name is required" }),
+});
+
+export const hostelRemoveSchema = z.object({
+  hostelId: z.string({ required_error: "Hostel id is required" }),
+});

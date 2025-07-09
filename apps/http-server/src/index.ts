@@ -11,6 +11,8 @@ import {
   groupCreateSchema,
   groupJoinSchema,
   groupRemoveSchema,
+  hostelCreateSchema,
+  hostelRemoveSchema,
   roomAddManySchema,
   roomAutoFillSchema,
   roomRemoveAllSchema,
@@ -287,6 +289,76 @@ app.delete("/admin/room/remove/all", adminAuthMiddleware, async (req, res) => {
     });
     res.status(200).json({
       msg: "rooms deleted successfully",
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg: "try again later",
+    });
+  }
+});
+
+app.post("/admin/hostel/create", adminAuthMiddleware, async (req, res) => {
+  const inputValidation = hostelCreateSchema.safeParse(req.body);
+  if (!inputValidation.success) {
+    res.status(400).json({
+      msg: "invalid data",
+      errors: inputValidation.error.issues[0],
+    });
+    return;
+  }
+  const { hostelName } = req.body;
+  try {
+    const hostel = await prisma.hostel.create({
+      data: {
+        name: hostelName,
+      },
+    });
+    res.status(200).json({
+      msg: "hostel created successfully",
+      hostel,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg: "try again later",
+    });
+  }
+});
+
+app.delete("/admin/hostel/remove", adminAuthMiddleware, async (req, res) => {
+  const inputValidation = hostelRemoveSchema.safeParse(req.body);
+  if (!inputValidation.success) {
+    res.status(400).json({
+      msg: "invalid data",
+      errors: inputValidation.error.issues[0],
+    });
+    return;
+  }
+  const { hostelId } = req.body;
+  try {
+    await prisma.hostel.delete({
+      where: {
+        id: hostelId,
+      },
+    });
+    res.status(200).json({
+      msg: "hostel deleted successfully",
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg: "try again later",
+    });
+  }
+});
+
+app.get("/admin/hostel", adminAuthMiddleware, async (req, res) => {
+  try {
+    const hostels = await prisma.hostel.findMany();
+    res.status(200).json({
+      msg: "hostels found",
+      hostels,
     });
   } catch (error) {
     console.log(error);
