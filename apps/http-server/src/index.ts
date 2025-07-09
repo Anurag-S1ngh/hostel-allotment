@@ -570,6 +570,7 @@ app.post(
         group,
       });
     } catch (error) {
+      console.log(error);
       res.status(500).json({
         msg: "try again later",
       });
@@ -646,8 +647,8 @@ app.delete(
       return;
     }
 
-    const groupId = req.params.groupId;
-    if (!groupId) {
+    const groupId = req.params.groupId?.trim();
+    if (!groupId || groupId === "") {
       res.status(400).json({
         msg: "invalid input",
         errors: "Group ID is required",
@@ -667,23 +668,51 @@ app.delete(
     const { memberId } = req.body;
 
     try {
-      const user = await prisma.groupMember.findFirst({
+      const groupAdmin = await prisma.groupMember.findFirst({
         where: {
           studentId: userId,
           groupId,
         },
       });
 
-      if (!user) {
+      if (!groupAdmin) {
         res.status(400).json({
           msg: "user not found",
         });
         return;
       }
 
-      if (!user.isGroupAdmin) {
+      if (!groupAdmin.isGroupAdmin) {
         res.status(400).json({
           msg: "you are not an admin",
+        });
+        return;
+      }
+
+      const member = await prisma.groupMember.findFirst({
+        where: {
+          studentId: memberId,
+          groupId,
+        },
+      });
+
+      if (!member) {
+        res.status(400).json({
+          msg: "member not found",
+        });
+        return;
+      }
+
+      if (member.studentId === groupAdmin.studentId) {
+        res.status(400).json({
+          msg: "Cannot remove yourself",
+        });
+        return;
+      }
+
+      if (groupAdmin.groupId !== member.groupId) {
+        res.status(400).json({
+          msg: "You are not a member of this group",
         });
         return;
       }
