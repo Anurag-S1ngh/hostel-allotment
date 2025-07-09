@@ -71,8 +71,8 @@ app.post("/signup", async (req: Request, res: Response) => {
   try {
     const user = await prisma.student.create({
       data: {
-        username: rollNumber,
-        email,
+        username: rollNumber.trim(),
+        email: email.trim(),
         password: hashPassword,
         cgpa,
         currentYear: studentCurrentYear,
@@ -142,7 +142,7 @@ app.post("/admin/signin", async (req: Request, res: Response) => {
       },
     });
     if (!user) {
-      res.json({
+      res.status(400).json({
         msg: "unauthorized",
       });
       return;
@@ -313,7 +313,7 @@ app.post("/admin/hostel/create", adminAuthMiddleware, async (req, res) => {
   try {
     const hostel = await prisma.hostel.create({
       data: {
-        name: hostelName,
+        name: hostelName.trim(),
       },
     });
     res.status(200).json({
@@ -553,7 +553,7 @@ app.post(
     try {
       const group = await prisma.group.create({
         data: {
-          name,
+          name: name.trim(),
           members: {
             create: {
               studentId: userId,
