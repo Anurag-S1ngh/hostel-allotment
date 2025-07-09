@@ -8,13 +8,14 @@ datasource db {
 }
 
 model Student {
-  id            String          @id @default(uuid())
-  username      String          @unique
-  email         String          @unique
-  password      String
-  cgpa          Int
-  allottedRooms AllottedRooms[]
-  groupMember   GroupMember?
+  id           String         @id @default(uuid())
+  username     String         @unique
+  email        String         @unique
+  password     String
+  cgpa         Float
+  currentYear  Int
+  allottedRoom AllottedRooms?
+  groupMember  GroupMember?
 }
 
 model Hostel {
@@ -29,7 +30,7 @@ model AllottedRooms {
   hostel     Hostel   @relation(fields: [hostelId], references: [id])
   hostelId   String
   student    Student  @relation(fields: [studentId], references: [id])
-  studentId  String
+  studentId  String   @unique
   room       Room     @relation(fields: [roomId], references: [id])
   roomId     String   @unique
   allottedAt DateTime @default(now())
@@ -58,11 +59,11 @@ model Admin {
 }
 
 model Room {
-  id            String         @id @default(uuid())
-  roomName      String         @unique
+  id            String          @id @default(uuid())
+  roomName      String          @unique
   capacity      Int
-  AllottedRooms AllottedRooms?
-  hostel        Hostel         @relation(fields: [hostelId], references: [id])
+  AllottedRooms AllottedRooms[]
+  hostel        Hostel          @relation(fields: [hostelId], references: [id])
   hostelId      String
 }
 
