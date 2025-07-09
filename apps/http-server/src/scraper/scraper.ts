@@ -2,9 +2,10 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 
 export async function getLatestCgpi(
+  start: string,
   rollNumber: string,
 ): Promise<number | null> {
-  const url = "http://results.nith.ac.in/scheme24/studentresult/result.asp";
+  const url = `http://results.nith.ac.in/scheme${start}/studentresult/result.asp`;
 
   const getRes = await axios.get(url, {
     headers: {

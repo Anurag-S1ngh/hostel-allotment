@@ -7,23 +7,48 @@ import jwt from "jsonwebtoken";
 import { AuthMiddlware } from "./middleware/auth";
 import { getLatestCgpi } from "./scraper/scraper";
 import { CustomExpressRequest } from "./type/type";
+import {
+  groupCreateSchema,
+  groupJoinSchema,
+  groupRemoveSchema,
+  roomAutoFillSchema,
+  studentInSchema,
+  studentUpSchema,
+} from "./zodSchema/schema";
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
 app.post("/signup", async (req: Request, res: Response) => {
+  const isValid = studentUpSchema.safeParse(req.body);
+  if (!isValid.success) {
+    res.status(400).json({
+      msg: "invalid data",
+      errors: isValid.error.issues[0],
+    });
+    return;
+  }
   const { email, password } = req.body;
   const hashPassword = await bcrypt.hash(password, 10);
   const rollNumber = req.body.rollNumber.toLowerCase();
-  console.log(rollNumber);
+
+  if (email.subString(0, 8) === rollNumber) {
+    res.status(400).json({
+      msg: "invalid roll number",
+    });
+    return;
+  }
+
   const year = new Date().getFullYear();
-  //  24bcs023
   const studentCurrentYear =
     parseInt(year.toString().slice(-2)) - parseInt(rollNumber.slice(0, 2));
   let cgpa;
   try {
-    cgpa = await getLatestCgpi(rollNumber);
+    cgpa = await getLatestCgpi(
+      rollNumber.toString().subString(0, 2),
+      rollNumber,
+    );
   } catch (error) {
     res.json({
       msg: "invalid roll number",
@@ -46,13 +71,13 @@ app.post("/signup", async (req: Request, res: Response) => {
         currentYear: studentCurrentYear,
       },
     });
-    res.json({
+    res.status(200).json({
       msg: "sign up successful",
       user,
     });
   } catch (error) {
     console.log(error);
-    res.json({
+    res.status(500).json({
       msg: "try again later",
     });
   }
@@ -60,6 +85,14 @@ app.post("/signup", async (req: Request, res: Response) => {
 });
 
 app.post("/signin", async (req: Request, res: Response) => {
+  const isValid = studentInSchema.safeParse(req.body);
+  if (!isValid.success) {
+    res.status(400).json({
+      msg: "invalid data",
+      errors: isValid.error.issues[0],
+    });
+    return;
+  }
   const { email, password } = req.body;
   try {
     const user = await prisma.student.findFirst({
@@ -75,7 +108,7 @@ app.post("/signin", async (req: Request, res: Response) => {
     }
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
-      res.json({
+      res.status(400).json({
         msg: "invalid password",
       });
       return;
@@ -86,7 +119,7 @@ app.post("/signin", async (req: Request, res: Response) => {
       token,
     });
   } catch (error) {
-    res.json({
+    res.status(500).json({
       msg: "try again later",
     });
   }
@@ -108,7 +141,7 @@ app.post("/admin/signin", async (req: Request, res: Response) => {
     }
     const isValidPassword = user.password === password;
     if (!isValidPassword) {
-      res.json({
+      res.status(400).json({
         msg: "invalid password",
       });
       return;
@@ -116,12 +149,12 @@ app.post("/admin/signin", async (req: Request, res: Response) => {
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!);
 
-    res.json({
+    res.status(200).json({
       msg: "sign in successful",
       token,
     });
   } catch (error) {
-    res.json({
+    res.status(500).json({
       msg: "try again later",
     });
   }
@@ -133,8 +166,16 @@ app.post(
   async (req: CustomExpressRequest, res: Response) => {
     const userId = req.userId;
     if (!userId) {
-      res.json({
+      res.status(400).json({
         msg: "sign in first",
+      });
+      return;
+    }
+    const isValid = groupCreateSchema.safeParse(req.body);
+    if (!isValid.success) {
+      res.status(400).json({
+        msg: "invalid data",
+        errors: isValid.error.issues[0],
       });
       return;
     }
@@ -154,12 +195,12 @@ app.post(
           members: true,
         },
       });
-      res.json({
+      res.status(200).json({
         msg: "group created successfully",
         group,
       });
     } catch (error) {
-      res.json({
+      res.status(500).json({
         msg: "try again later",
       });
     }
@@ -173,8 +214,17 @@ app.post(
   async (req: CustomExpressRequest, res: Response) => {
     const userId = req.userId;
     if (!userId) {
-      res.json({
+      res.status(400).json({
         msg: "sign in first",
+      });
+      return;
+    }
+
+    const isValid = groupJoinSchema.safeParse(req.body);
+    if (!isValid.success) {
+      res.status(400).json({
+        msg: "invalid data",
+        errors: isValid.error.issues[0],
       });
       return;
     }
@@ -189,7 +239,7 @@ app.post(
       });
 
       if (!group) {
-        res.json({
+        res.status(400).json({
           msg: "group not found",
         });
         return;
@@ -200,12 +250,12 @@ app.post(
           studentId: userId,
         },
       });
-      res.json({
+      res.status(200).json({
         msg: "group joined successfully",
         groupMember,
       });
     } catch (error) {
-      res.json({
+      res.status(500).json({
         msg: "try again later",
       });
     }
@@ -218,13 +268,30 @@ app.delete(
   async (req: CustomExpressRequest, res: Response) => {
     const userId = req.userId;
     if (!userId) {
-      res.json({
+      res.status(400).json({
         msg: "sign in first",
       });
       return;
     }
 
     const groupId = req.params.groupId;
+    if (!groupId) {
+      res.status(400).json({
+        msg: "invalid input",
+        errors: "Group ID is required",
+      });
+      return;
+    }
+
+    const isValid = groupRemoveSchema.safeParse(req.body);
+    if (!isValid.success) {
+      res.status(400).json({
+        msg: "invalid data",
+        errors: isValid.error.issues[0],
+      });
+      return;
+    }
+
     const { memberId } = req.body;
 
     try {
@@ -236,14 +303,14 @@ app.delete(
       });
 
       if (!user) {
-        res.json({
+        res.status(400).json({
           msg: "user not found",
         });
         return;
       }
 
       if (!user.isGroupAdmin) {
-        res.json({
+        res.status(400).json({
           msg: "you are not an admin",
         });
         return;
@@ -255,12 +322,12 @@ app.delete(
           groupId,
         },
       });
-      res.json({
+      res.status(200).json({
         msg: "group member removed successfully",
         removedMember,
       });
     } catch (error) {
-      res.json({
+      res.status(500).json({
         msg: "try again later",
       });
     }
@@ -270,7 +337,7 @@ app.delete(
 app.get("/room", async (req: CustomExpressRequest, res: Response) => {
   const userId = req.userId;
   if (!userId) {
-    res.json({
+    res.status(400).json({
       msg: "sign in first",
     });
     return;
@@ -291,18 +358,18 @@ app.get("/room", async (req: CustomExpressRequest, res: Response) => {
       },
     });
     if (!room) {
-      res.json({
+      res.status(400).json({
         msg: "no room found",
       });
       return;
     }
-    res.json({
+    res.status(200).json({
       msg: "room found",
       room,
     });
   } catch (error) {
     console.log(error);
-    res.json({
+    res.status(500).json({
       msg: "try again later",
     });
   }
@@ -313,11 +380,21 @@ app.post(
   async (req: CustomExpressRequest, res: Response) => {
     const userId = req.userId;
     if (!userId) {
-      res.json({
+      res.status(400).json({
         msg: "sign in first",
       });
       return;
     }
+
+    const isValid = roomAutoFillSchema.safeParse(req.body);
+    if (!isValid.success) {
+      res.status(400).json({
+        msg: "invalid data",
+        errors: isValid.error.issues[0],
+      });
+      return;
+    }
+
     const { hostelId, forStudentYear } = req.body;
     try {
       const admin = await prisma.admin.findFirst({
