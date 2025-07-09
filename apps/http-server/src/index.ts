@@ -31,7 +31,7 @@ app.post("/signup", async (req: Request, res: Response) => {
   if (!isValid.success) {
     res.status(400).json({
       msg: "invalid data",
-      errors: isValid.error.issues[0],
+      error: isValid.error.issues[0]?.message,
     });
     return;
   }
@@ -39,9 +39,10 @@ app.post("/signup", async (req: Request, res: Response) => {
   const hashPassword = await bcrypt.hash(password, 10);
   const rollNumber = req.body.rollNumber.toLowerCase();
 
-  if (email.subString(0, 8) === rollNumber) {
+  if (email.substring(0, 8) !== rollNumber) {
     res.status(400).json({
-      msg: "invalid roll number",
+      msg: "invalid input",
+      error: "invalid roll number or email",
     });
     return;
   }
@@ -52,11 +53,11 @@ app.post("/signup", async (req: Request, res: Response) => {
   let cgpa;
   try {
     cgpa = await getLatestCgpi(
-      rollNumber.toString().subString(0, 2),
+      rollNumber.toString().substring(0, 2),
       rollNumber,
     );
   } catch (error) {
-    res.json({
+    res.status(400).json({
       msg: "invalid roll number",
     });
     return;
@@ -81,6 +82,7 @@ app.post("/signup", async (req: Request, res: Response) => {
       msg: "sign up successful",
       user,
     });
+    return;
   } catch (error) {
     console.log(error);
     res.status(500).json({
@@ -95,7 +97,7 @@ app.post("/signin", async (req: Request, res: Response) => {
   if (!isValid.success) {
     res.status(400).json({
       msg: "invalid data",
-      errors: isValid.error.issues[0],
+      errors: isValid.error.issues[0]?.message,
     });
     return;
   }
@@ -107,7 +109,7 @@ app.post("/signin", async (req: Request, res: Response) => {
       },
     });
     if (!user) {
-      res.json({
+      res.status(400).json({
         msg: "user not found",
       });
       return;
@@ -211,7 +213,7 @@ app.put("/admin/room/update", adminAuthMiddleware, async (req, res) => {
   if (!isValid.success) {
     res.status(400).json({
       msg: "invalid data",
-      errors: isValid.error.issues[0],
+      errors: isValid.error.issues[0]?.message,
     });
     return;
   }
@@ -242,7 +244,7 @@ app.delete("/admin/room/remove", adminAuthMiddleware, async (req, res) => {
   if (!isValid.success) {
     res.status(400).json({
       msg: "invalid data",
-      errors: isValid.error.issues[0],
+      errors: isValid.error.issues[0]?.message,
     });
     return;
   }
@@ -276,7 +278,7 @@ app.delete("/admin/room/remove/all", adminAuthMiddleware, async (req, res) => {
   if (!isValidInput.success) {
     res.status(400).json({
       msg: "invalid data",
-      errors: isValidInput.error.issues[0],
+      errors: isValidInput.error.issues[0]?.message,
     });
     return;
   }
@@ -303,7 +305,7 @@ app.post("/admin/hostel/create", adminAuthMiddleware, async (req, res) => {
   if (!inputValidation.success) {
     res.status(400).json({
       msg: "invalid data",
-      errors: inputValidation.error.issues[0],
+      errors: inputValidation.error.issues[0]?.message,
     });
     return;
   }
@@ -331,7 +333,7 @@ app.delete("/admin/hostel/remove", adminAuthMiddleware, async (req, res) => {
   if (!inputValidation.success) {
     res.status(400).json({
       msg: "invalid data",
-      errors: inputValidation.error.issues[0],
+      errors: inputValidation.error.issues[0]?.message,
     });
     return;
   }
@@ -383,7 +385,7 @@ app.post(
     if (!isValid.success) {
       res.status(400).json({
         msg: "invalid data",
-        errors: isValid.error.issues[0],
+        errors: isValid.error.issues[0]?.message,
       });
       return;
     }
@@ -543,7 +545,7 @@ app.post(
     if (!isValid.success) {
       res.status(400).json({
         msg: "invalid data",
-        errors: isValid.error.issues[0],
+        errors: isValid.error.issues[0]?.message,
       });
       return;
     }
@@ -592,7 +594,7 @@ app.post(
     if (!isValid.success) {
       res.status(400).json({
         msg: "invalid data",
-        errors: isValid.error.issues[0],
+        errors: isValid.error.issues[0]?.message,
       });
       return;
     }
@@ -655,7 +657,7 @@ app.delete(
     if (!isValid.success) {
       res.status(400).json({
         msg: "invalid data",
-        errors: isValid.error.issues[0],
+        errors: isValid.error.issues[0]?.message,
       });
       return;
     }
