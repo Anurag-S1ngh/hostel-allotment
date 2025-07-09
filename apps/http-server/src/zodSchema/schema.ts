@@ -85,3 +85,7 @@ export const hostelCreateSchema = z.object({
 export const hostelRemoveSchema = z.object({
   hostelId: z.string({ required_error: "Hostel id is required" }),
 });
+
+export const adminGetAllGroupsSchema = z.object({
+  studentYear: z.number({ required_error: "Year is required" }),
+});

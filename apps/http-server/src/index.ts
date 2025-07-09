@@ -8,6 +8,7 @@ import { adminAuthMiddleware, AuthMiddlware } from "./middleware/auth";
 import { getLatestCgpi } from "./scraper/scraper";
 import { CustomExpressRequest } from "./type/type";
 import {
+  adminGetAllGroupsSchema,
   groupCreateSchema,
   groupJoinSchema,
   groupRemoveSchema,
@@ -370,6 +371,37 @@ app.get("/admin/hostel", adminAuthMiddleware, async (req, res) => {
   }
 });
 
+app.get("/admin/group/all", adminAuthMiddleware, async (req, res) => {
+  const isValidInput = adminGetAllGroupsSchema.safeParse(req.body);
+  if (!isValidInput.success) {
+    res.status(400).json({
+      msg: "invalid data",
+      errors: isValidInput.error.issues[0]?.message,
+    });
+    return;
+  }
+  const { studentYear } = req.body;
+  try {
+    const groups = await prisma.group.findMany({
+      where: {
+        studentYear,
+      },
+      include: {
+        members: true,
+      },
+    });
+    res.status(200).json({
+      msg: "groups found",
+      groups,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      msg: "try again later",
+    });
+  }
+});
+
 app.post(
   "/admin/room/auto-fill",
   async (req: CustomExpressRequest, res: Response) => {
@@ -551,9 +583,26 @@ app.post(
     }
     const { name } = req.body;
     try {
+      const student = await prisma.student.findFirst({
+        where: {
+          id: userId,
+        },
+        select: {
+          currentYear: true,
+        },
+      });
+
+      if (!student) {
+        res.status(400).json({
+          msg: "student not found",
+        });
+        return;
+      }
+
       const group = await prisma.group.create({
         data: {
           name: name.trim(),
+          studentYear: student.currentYear,
           members: {
             create: {
               studentId: userId,
@@ -603,15 +652,55 @@ app.post(
     const { groupName } = req.body;
 
     try {
+      const student = await prisma.student.findFirst({
+        where: {
+          id: userId,
+        },
+        select: {
+          currentYear: true,
+        },
+      });
+
+      if (!student) {
+        res.status(400).json({
+          msg: "student not found",
+        });
+        return;
+      }
+
       const group = await prisma.group.findFirst({
         where: {
           name: groupName,
+        },
+        include: {
+          members: true,
         },
       });
 
       if (!group) {
         res.status(400).json({
           msg: "group not found",
+        });
+        return;
+      }
+
+      if (student.currentYear !== group.studentYear) {
+        res.status(400).json({
+          msg: "student is not in the group",
+        });
+        return;
+      }
+
+      if (group.members.some((m) => m.studentId === userId)) {
+        res.status(400).json({
+          msg: "user is already a member of the group",
+        });
+        return;
+      }
+
+      if (group.members.length >= 4) {
+        res.status(400).json({
+          msg: "group is full",
         });
         return;
       }
