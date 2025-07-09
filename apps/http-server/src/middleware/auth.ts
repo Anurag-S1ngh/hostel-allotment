@@ -11,15 +11,15 @@ export function AuthMiddlware(
 ) {
   const token = req.headers.authorization;
   if (!token) {
-    res.status(401).json({
-      msg: "sign up first",
+    res.status(400).json({
+      msg: "sign in first",
     });
     return;
   }
   const decodedData = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
   if (!decodedData.userId) {
-    res.status(401).json({
-      msg: "sign up first",
+    res.status(400).json({
+      msg: "sign in first",
     });
     return;
   }
@@ -35,7 +35,7 @@ export async function adminAuthMiddleware(
 ) {
   const adminId = req.userId;
   if (!adminId) {
-    res.status(401).json({ msg: "unauthorized", error: "Unauthorized" });
+    res.status(400).json({ msg: "unauthorized", error: "Unauthorized" });
     return;
   }
 

@@ -614,12 +614,14 @@ app.post(
         });
         return;
       }
+
       const groupMember = await prisma.groupMember.create({
         data: {
           groupId: group.id,
           studentId: userId,
         },
       });
+
       res.status(200).json({
         msg: "group joined successfully",
         groupMember,

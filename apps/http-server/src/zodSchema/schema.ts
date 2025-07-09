@@ -40,7 +40,7 @@ export const groupCreateSchema = z.object({
 });
 
 export const groupJoinSchema = z.object({
-  name: z.string({ required_error: "Group name is required" }),
+  groupName: z.string({ required_error: "Group name is required" }),
 });
 
 export const groupRemoveSchema = z.object({
