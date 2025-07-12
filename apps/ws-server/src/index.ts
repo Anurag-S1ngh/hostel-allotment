@@ -223,11 +223,34 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
           ws.send(
             JSON.stringify({
               type: "subscribe",
-              message: `Subscribed to hostel ${subHostelId}`,
+              message: `Subscribed to hostel`,
             }),
           );
           break;
 
+        case "unsubscribe":
+          const { hostelId: unsubHostelId } = parseData;
+          if (!unsubHostelId) {
+            ws.send(
+              JSON.stringify({
+                type: "unsubscribe",
+                message: "Hostel ID is required to unsubscribe",
+              }),
+            );
+            return;
+          }
+
+          for (const viewers of viewersMap.values()) {
+            viewers.delete(ws);
+          }
+
+          ws.send(
+            JSON.stringify({
+              type: "ussubscribe",
+              message: `Unubscribed to hostel`,
+            }),
+          );
+          break;
         default:
           ws.send(
             JSON.stringify({

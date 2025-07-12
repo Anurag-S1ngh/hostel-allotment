@@ -824,45 +824,88 @@ app.delete(
   },
 );
 
-app.get("/room", async (req: CustomExpressRequest, res: Response) => {
-  const userId = req.userId;
-  if (!userId) {
-    res.status(400).json({
-      msg: "sign in first",
-    });
-    return;
-  }
-  try {
-    const room = await prisma.allottedRooms.findFirst({
-      where: {
-        studentId: userId,
-      },
-      select: {
-        room: {
-          select: {
-            roomName: true,
-            capacity: true,
-          },
-        },
-        allottedAt: true,
-      },
-    });
-    if (!room) {
-      res.status(400).json({
-        msg: "no room found",
+app.delete(
+  "/group/:groupId/leave",
+  AuthMiddlware,
+  async (req: CustomExpressRequest, res: Response) => {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({
+        msg: "sign in first",
       });
       return;
     }
-    res.status(200).json({
-      msg: "room found",
-      room,
-    });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      msg: "try again later",
-    });
-  }
-});
+    const groupId = req.params.groupId?.trim();
+    if (!groupId || groupId === "") {
+      res.status(400).json({
+        msg: "invalid input",
+        errors: "Group ID is required",
+      });
+      return;
+    }
+    try {
+      await prisma.groupMember.delete({
+        where: {
+          studentId: userId,
+          groupId,
+        },
+      });
+      res.status(200).json({
+        msg: "group member removed successfully",
+      });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({
+        msg: "try again later",
+      });
+    }
+    return;
+  },
+);
+
+app.get(
+  "/room",
+  AuthMiddlware,
+  async (req: CustomExpressRequest, res: Response) => {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(400).json({
+        msg: "sign in first",
+      });
+      return;
+    }
+    try {
+      const room = await prisma.allottedRooms.findFirst({
+        where: {
+          studentId: userId,
+        },
+        select: {
+          room: {
+            select: {
+              roomName: true,
+              capacity: true,
+            },
+          },
+          allottedAt: true,
+        },
+      });
+      if (!room) {
+        res.status(400).json({
+          msg: "no room found",
+        });
+        return;
+      }
+      res.status(200).json({
+        msg: "room found",
+        room,
+      });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({
+        msg: "try again later",
+      });
+    }
+  },
+);
 
 app.listen(3001);

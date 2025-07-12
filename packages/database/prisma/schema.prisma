@@ -37,9 +37,10 @@ model AllottedRooms {
 }
 
 model Group {
-  id      String        @id @default(uuid())
-  name    String        @unique
-  members GroupMember[]
+  id          String        @id @default(uuid())
+  name        String        @unique
+  studentYear Int
+  members     GroupMember[]
 }
 
 model GroupMember {
