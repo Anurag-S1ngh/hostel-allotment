@@ -8,39 +8,47 @@ datasource db {
 }
 
 model Student {
-  id           String         @id @default(uuid())
-  username     String         @unique
-  email        String         @unique
-  password     String
-  cgpa         Float
-  currentYear  Int
-  allottedRoom AllottedRooms?
-  groupMember  GroupMember?
+  id            String         @id @default(uuid())
+  username      String         @unique
+  email         String         @unique
+  password      String
+  cgpa          Float
+  currentYear   Int
+  allottedRoom  AllottedRooms?
+  groupMember   GroupMember?
+  Institution   Institution    @relation(fields: [institutionId], references: [id])
+  institutionId String
 }
 
 model Hostel {
   id            String          @id @default(uuid())
-  name          HostelName
+  name          String          @unique
   allottedRooms AllottedRooms[]
   Room          Room[]
+  Institution   Institution     @relation(fields: [institutionId], references: [id])
+  institutionId String
 }
 
 model AllottedRooms {
-  id         String   @id @default(uuid())
-  hostel     Hostel   @relation(fields: [hostelId], references: [id])
-  hostelId   String
-  student    Student  @relation(fields: [studentId], references: [id])
-  studentId  String   @unique
-  room       Room     @relation(fields: [roomId], references: [id])
-  roomId     String   @unique
-  allottedAt DateTime @default(now())
+  id            String      @id @default(uuid())
+  hostel        Hostel      @relation(fields: [hostelId], references: [id])
+  hostelId      String
+  student       Student     @relation(fields: [studentId], references: [id])
+  studentId     String      @unique
+  room          Room        @relation(fields: [roomId], references: [id])
+  roomId        String      @unique
+  allottedAt    DateTime    @default(now())
+  Institution   Institution @relation(fields: [institutionId], references: [id])
+  institutionId String
 }
 
 model Group {
-  id          String        @id @default(uuid())
-  name        String        @unique
-  studentYear Int
-  members     GroupMember[]
+  id            String        @id @default(uuid())
+  name          String        @unique
+  studentYear   Int
+  members       GroupMember[]
+  Institution   Institution   @relation(fields: [institutionId], references: [id])
+  institutionId String
 }
 
 model GroupMember {
@@ -53,10 +61,13 @@ model GroupMember {
 }
 
 model Admin {
-  id       String @id @default(uuid())
-  username String
-  email    String @unique
-  password String
+  id            String      @id @default(uuid())
+  username      String
+  email         String      @unique
+  institute     Institution @relation(fields: [institutionId], references: [id])
+  instituteId   String
+  password      String
+  institutionId String
 }
 
 model Room {
@@ -66,8 +77,17 @@ model Room {
   AllottedRooms AllottedRooms[]
   hostel        Hostel          @relation(fields: [hostelId], references: [id])
   hostelId      String
+  Institution   Institution     @relation(fields: [institutionId], references: [id])
+  institutionId String
 }
 
-enum HostelName {
-  KBH
+model Institution {
+  id            String          @id @default(uuid())
+  name          String          @unique
+  students      Student[]
+  hostels       Hostel[]
+  rooms         Room[]
+  allottedRooms AllottedRooms[]
+  admins        Admin[]
+  groups        Group[]
 }

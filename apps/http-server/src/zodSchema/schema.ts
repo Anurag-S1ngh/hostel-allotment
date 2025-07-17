@@ -12,6 +12,8 @@ export const studentUpSchema = z.object({
   rollNumber: z
     .string({ required_error: "Roll number is required" })
     .regex(/^\d{2}[a-zA-Z]{3}\d{3}$/, "Invalid institutional roll number"),
+
+  institutionId: z.string({ required_error: "Institution is required" }),
 });
 
 export const studentInSchema = z.object({
@@ -25,6 +27,10 @@ export const studentInSchema = z.object({
   password: z
     .string({ required_error: "Password is required" })
     .min(6, "Password must be at least 6 characters long"),
+});
+
+export const studentGetRoomSchema = z.object({
+  institutionId: z.string({ required_error: "Institution id is required" }),
 });
 
 export const adminAuthSchema = z.object({
@@ -50,6 +56,7 @@ export const groupRemoveSchema = z.object({
 export const roomAutoFillSchema = z.object({
   hostelId: z.string({ required_error: "Hostel id is required" }),
   forStudentYear: z.number({ required_error: "Year is required" }),
+  institutionId: z.string({ required_error: "Institution is required" }),
 });
 
 export const roomAddManySchema = z.object({

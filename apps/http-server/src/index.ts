@@ -19,6 +19,7 @@ import {
   roomRemoveAllSchema,
   roomRemoveSchema,
   roomUpdateSchema,
+  studentGetRoomSchema,
   studentInSchema,
   studentUpSchema,
 } from "./zodSchema/schema";
@@ -36,7 +37,8 @@ app.post("/signup", async (req: Request, res: Response) => {
     });
     return;
   }
-  const { email, password } = req.body;
+
+  const { email, password, institutionId } = req.body;
   const hashPassword = await bcrypt.hash(password, 10);
   const rollNumber = req.body.rollNumber.toLowerCase();
 
@@ -77,6 +79,7 @@ app.post("/signup", async (req: Request, res: Response) => {
         password: hashPassword,
         cgpa,
         currentYear: studentCurrentYear,
+        institutionId,
       },
     });
     res.status(200).json({
@@ -310,11 +313,12 @@ app.post("/admin/hostel/create", adminAuthMiddleware, async (req, res) => {
     });
     return;
   }
-  const { hostelName } = req.body;
+  const { hostelName, institutionId } = req.body;
   try {
     const hostel = await prisma.hostel.create({
       data: {
         name: hostelName.trim(),
+        institutionId,
       },
     });
     res.status(200).json({
@@ -422,7 +426,7 @@ app.post(
       return;
     }
 
-    const { hostelId, forStudentYear } = req.body;
+    const { hostelId, forStudentYear, institutionId } = req.body;
     try {
       const admin = await prisma.admin.findFirst({
         where: {
@@ -491,6 +495,7 @@ app.post(
         for (const s of groupStudents) {
           await prisma.allottedRooms.create({
             data: {
+              institutionId,
               hostelId,
               roomId: room.id,
               studentId: s.id,
@@ -520,6 +525,7 @@ app.post(
         for (const student of fillers) {
           await prisma.allottedRooms.create({
             data: {
+              institutionId,
               hostelId,
               roomId: room.id,
               studentId: student.id,
@@ -544,6 +550,7 @@ app.post(
           await prisma.allottedRooms.create({
             data: {
               hostelId,
+              institutionId,
               roomId: room.id,
               studentId: student.id,
             },
@@ -589,6 +596,7 @@ app.post(
         },
         select: {
           currentYear: true,
+          institutionId: true,
         },
       });
 
@@ -602,6 +610,7 @@ app.post(
       const group = await prisma.group.create({
         data: {
           name: name.trim(),
+          institutionId: student.institutionId,
           studentYear: student.currentYear,
           members: {
             create: {
@@ -874,10 +883,20 @@ app.get(
       });
       return;
     }
+    const isValidInput = studentGetRoomSchema.safeParse(req.body);
+    if (!isValidInput.success) {
+      res.status(400).json({
+        msg: "invalid data",
+        errors: isValidInput.error.issues[0]?.message,
+      });
+      return;
+    }
+    const { institutionId } = req.body;
     try {
       const room = await prisma.allottedRooms.findFirst({
         where: {
           studentId: userId,
+          institutionId: institutionId,
         },
         select: {
           room: {
