@@ -4,7 +4,6 @@ import "dotenv/config";
 import express, { Request, Response, Router } from "express";
 import jwt from "jsonwebtoken";
 import { getLatestCgpi } from "../scraper/scraper";
-import { studentInSchema, studentSignUpSchema } from "../zodSchema/schema";
 
 import { AuthMiddlware } from "../middleware/auth";
 import { CustomExpressRequest } from "../type/type";
@@ -13,7 +12,9 @@ import {
   groupJoinSchema,
   groupRemoveSchema,
   studentGetRoomSchema,
-} from "../zodSchema/schema";
+  studentInSchema,
+  studentSignUpSchema,
+} from "../zodSchema/student";
 
 export const studentRouter: Router = express.Router();
 

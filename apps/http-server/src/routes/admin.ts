@@ -13,7 +13,7 @@ import {
   roomRemoveAllSchema,
   roomRemoveSchema,
   roomUpdateSchema,
-} from "../zodSchema/schema";
+} from "../zodSchema/admin";
 
 export const adminRouter: Router = express.Router();
 
