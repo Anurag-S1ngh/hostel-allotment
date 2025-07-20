@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const studentUpSchema = z.object({
+export const studentSignUpSchema = z.object({
   email: z
     .string({ required_error: "Email is required" })
     .regex(/^\d{2}[a-zA-Z]{3}\d{3}@nith\.ac\.in$/, "Incorrect email"),
