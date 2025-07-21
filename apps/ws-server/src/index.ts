@@ -3,12 +3,46 @@ import "dotenv/config";
 import { type IncomingMessage } from "http";
 import jwt from "jsonwebtoken";
 import { WebSocket, WebSocketServer } from "ws";
+import { Group } from "./types/types";
 
 const wss = new WebSocketServer({ port: 8080 });
 
 const userMap = new Map<string, WebSocket>();
-const groupQueue = new Map<string, any>();
+const GROUP_TIMEOUT_MS = 5 * 60 * 1000;
+
+const groupQueue = new Map<string, Group[]>();
 const viewersMap = new Map<string, Set<WebSocket>>();
+let timer: NodeJS.Timeout | null;
+
+function startTimer() {
+  if (timer) {
+    return;
+  }
+
+  timer = setInterval(() => {
+    const now = Date.now();
+    for (const [hostelId, queue] of groupQueue) {
+      const currentGroup = queue[0];
+      if (currentGroup) {
+        if (!currentGroup.startTime) {
+          currentGroup.startTime = now;
+        }
+        const elapsedTime = now - currentGroup.startTime;
+        if (elapsedTime > GROUP_TIMEOUT_MS) {
+          const newQueue = queue.slice(1);
+          if (newQueue[0]) {
+            newQueue[0].startTime = now;
+          }
+          groupQueue.set(hostelId, newQueue);
+        }
+      }
+    }
+    if ([...groupQueue.values()].every((e) => e.length === 0) && timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  }, 1000);
+}
 
 wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   if (!req.url) {
@@ -83,6 +117,13 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             }),
           );
 
+          ws.send(
+            JSON.stringify({
+              type: "initialise",
+              message: "Queue initialised",
+            }),
+          );
+
           break;
 
         case "room-selected":
@@ -98,29 +139,13 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             return;
           }
 
-          console.log(hostelQueue);
+          if (!hostelQueue[0].startTime) {
+            hostelQueue[0].startTime = Date.now();
+          }
 
-          const currentGroup = hostelQueue[0];
-          const elapsedTime = Date.now() - currentGroup.startTime;
+          const elapsedTime = Date.now() - hostelQueue[0].startTime;
 
-          console.log("elapsedTime: ", elapsedTime);
-
-          let canSelect = false;
-
-          if (elapsedTime <= 2 * 60 * 1000) {
-            canSelect = currentGroup.members.some(
-              (e: any) => e.studentId === userId && e.isGroupAdmin,
-            );
-          } else if (elapsedTime <= 4 * 60 * 1000) {
-            canSelect = currentGroup.members.some(
-              (e: any) => e.studentId === userId,
-            );
-          } else {
-            const newQueue = hostelQueue.slice(1);
-            if (newQueue[0]) {
-              newQueue[0].startTime = Date.now();
-            }
-            groupQueue.set(parseData.hostelId, newQueue);
+          if (elapsedTime > GROUP_TIMEOUT_MS) {
             ws.send(
               JSON.stringify({
                 type: "room-selected",
@@ -131,27 +156,16 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             return;
           }
 
-          console.log("isTurn: ", canSelect);
-          if (!canSelect) {
-            ws.send(
-              JSON.stringify({
-                type: "room-selected",
-                message: "You are not in the queue or not group admin",
-              }),
-            );
-            return;
-          }
-
           const { roomId, hostelId } = parseData;
 
-          const roomExists = await prisma.allottedRooms.findFirst({
+          const roomAlloted = await prisma.allottedRooms.findFirst({
             where: {
               roomId,
               hostelId,
             },
           });
 
-          if (roomExists) {
+          if (roomAlloted) {
             ws.send(
               JSON.stringify({
                 type: "room-selected",
@@ -167,6 +181,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
                 hostelId,
                 studentId: member.id,
                 roomId,
+                institutionId: member.institutionId,
               },
             });
           }
@@ -175,25 +190,24 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             JSON.stringify({
               type: "room-selected",
               message: "Room selected",
-              roomId,
-              hostel: hostelId,
             }),
           );
 
           const newQueue = hostelQueue.slice(1);
-          if (newQueue[0]) {
+
+          if (newQueue.length === 0) {
+            groupQueue.delete(parseData.hostelId);
+          } else if (newQueue[0]) {
             newQueue[0].startTime = Date.now();
+            groupQueue.set(parseData.hostelId, newQueue);
           }
-          groupQueue.set(parseData.hostelId, newQueue);
 
           const watchers = viewersMap.get(hostelId);
           if (watchers) {
             const payload = JSON.stringify({
               type: "update",
               message: "Room selected",
-              roomId,
-              hostelId,
-              group: hostelQueue[0].members.map((m: any) => m.studentId),
+              // group: newQueue[0].members.map((m: any) => m.studentId),
             });
 
             for (const viewer of watchers) {
@@ -240,17 +254,103 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             return;
           }
 
-          for (const viewers of viewersMap.values()) {
+          const viewers = viewersMap.get(unsubHostelId);
+          if (viewers) {
             viewers.delete(ws);
+            if (viewers.size === 0) {
+              viewersMap.delete(unsubHostelId);
+            }
           }
 
           ws.send(
             JSON.stringify({
-              type: "ussubscribe",
-              message: `Unubscribed to hostel`,
+              type: "unsubscribe",
+              message: `Unsubscribed from hostel`,
             }),
           );
           break;
+
+        case "start":
+          startTimer();
+
+          ws.send(
+            JSON.stringify({
+              type: "start",
+              message: "Timer started",
+            }),
+          );
+
+          break;
+
+        case "stop":
+          try {
+            const admin = await prisma.admin.findFirst({
+              where: {
+                id: userId,
+              },
+            });
+
+            if (!admin) {
+              ws.send(
+                JSON.stringify({
+                  type: "stop",
+                  message: "User not found",
+                }),
+              );
+              return;
+            }
+
+            const hostel = await prisma.hostel.findFirst({
+              where: {
+                id: hostelId,
+              },
+            });
+
+            if (!hostel) {
+              ws.send(
+                JSON.stringify({
+                  type: "stop",
+                  message: "Hostel not found",
+                }),
+              );
+              return;
+            }
+
+            if (admin.institutionId !== hostel.institutionId) {
+              ws.send(
+                JSON.stringify({
+                  type: "stop",
+                  message: "You are not admin of this hostel",
+                }),
+              );
+              return;
+            }
+
+            const queue = groupQueue.get(hostelId);
+            if (!queue) {
+              ws.send(
+                JSON.stringify({
+                  type: "stop",
+                  message: "Queue not found",
+                }),
+              );
+              return;
+            }
+
+            groupQueue.delete(hostelId);
+
+            ws.send(
+              JSON.stringify({
+                type: "stop",
+                message: "Allotment stopped",
+              }),
+            );
+          } catch (error) {
+            console.log(error);
+          }
+
+          break;
+
         default:
           ws.send(
             JSON.stringify({
@@ -265,8 +365,11 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     ws.on("close", () => {
       userMap.delete(userId);
 
-      for (const viewers of viewersMap.values()) {
+      for (const [key, viewers] of viewersMap.entries()) {
         viewers.delete(ws);
+        if (viewers.size === 0) {
+          viewersMap.delete(key);
+        }
       }
     });
   });
