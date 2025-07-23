@@ -7,8 +7,7 @@ import { Group } from "./types/types";
 
 const wss = new WebSocketServer({ port: 8080 });
 
-const userMap = new Map<string, WebSocket>();
-const GROUP_TIMEOUT_MS = 5 * 60 * 1000;
+const GROUP_TIMEOUT_MS = 5 * 60 * 1000; // 5 min
 
 const groupQueue = new Map<string, Group[]>();
 const viewersMap = new Map<string, Set<WebSocket>>();
@@ -71,8 +70,6 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     }
 
     const userId = decoded.userId;
-
-    userMap.set(userId, ws);
 
     ws.on("message", async (data) => {
       let parseData;
@@ -363,8 +360,6 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     });
 
     ws.on("close", () => {
-      userMap.delete(userId);
-
       for (const [key, viewers] of viewersMap.entries()) {
         viewers.delete(ws);
         if (viewers.size === 0) {
