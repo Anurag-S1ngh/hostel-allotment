@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export const studentUpdateCgpaSchema = z.object({
+  institutionId: z.string({ required_error: "Institution id is required" }),
+  rollNumber: z
+    .string({ required_error: "Roll number is required" })
+    .regex(/^\d{2}[a-zA-Z]{3}\d{3}$/, "Invalid institutional roll number"),
+});
+
 export const studentSignUpSchema = z.object({
   email: z
     .string({ required_error: "Email is required" })

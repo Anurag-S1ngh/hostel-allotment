@@ -1,5 +1,31 @@
 import { z } from "zod";
 
+export const adminUpdateCgpaAllSchema = z.object({
+  institutionId: z.string({ required_error: "Institution id is required" }),
+  rollNumbers: z
+    .array(
+      z.object({
+        rollNumber: z
+          .string({ required_error: "Roll number is required" })
+          .regex(
+            /^\d{2}[a-zA-Z]{3}\d{3}$/,
+            "Invalid institutional roll number",
+          ),
+      }),
+    )
+    .nonempty({ message: "No roll numbers provided" }),
+});
+
+export const adminUpdateCgpaSchema = z.object({
+  institutionId: z.string({ required_error: "Institution id is required" }),
+  cgpa: z
+    .number({ required_error: "CGPA is required" })
+    .min(3, "CGPA must be at least 3"),
+  rollNumber: z
+    .string({ required_error: "Roll number is required" })
+    .regex(/^\d{2}[a-zA-Z]{3}\d{3}$/, "Invalid institutional roll number"),
+});
+
 export const adminAuthSchema = z.object({
   email: z.string({ required_error: "Email is required" }),
 

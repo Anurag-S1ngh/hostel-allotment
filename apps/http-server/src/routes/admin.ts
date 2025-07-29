@@ -3,9 +3,12 @@ import "dotenv/config";
 import express, { Request, Response, Router } from "express";
 import jwt from "jsonwebtoken";
 import { adminAuthMiddleware } from "../middleware/adminAuth";
+import { getLatestCgpi } from "../scraper/scraper";
 import { CustomExpressRequest } from "../type/type";
 import {
   adminGetAllGroupsSchema,
+  adminUpdateCgpaAllSchema,
+  adminUpdateCgpaSchema,
   hostelCreateSchema,
   hostelRemoveSchema,
   roomAddManySchema,
@@ -16,6 +19,167 @@ import {
 } from "../zodSchema/admin";
 
 export const adminRouter: Router = express.Router();
+
+adminRouter.put(
+  "/update/student/cgpa/all",
+  adminAuthMiddleware,
+  async (req: CustomExpressRequest, res) => {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(400).json({
+        msg: "sign in first",
+      });
+      return;
+    }
+    const isValid = adminUpdateCgpaAllSchema.safeParse(req.body);
+    if (!isValid.success) {
+      res.status(400).json({
+        msg: "invalid data",
+        errors: isValid.error.issues[0]?.message,
+      });
+      return;
+    }
+    const { institutionId } = isValid.data;
+    try {
+      const admin = await prisma.admin.findFirst({
+        where: {
+          id: userId,
+        },
+      });
+      if (!admin) {
+        res.status(400).json({
+          msg: "unauthorized",
+        });
+        return;
+      }
+      if (admin.institutionId != institutionId) {
+        res.status(400).json({
+          msg: "unauthorized",
+        });
+        return;
+      }
+
+      const students = await prisma.student.findMany({
+        where: {
+          institutionId,
+        },
+        select: {
+          username: true,
+        },
+      });
+
+      const studentsWithCgpa = await Promise.all(
+        students.map(async (student) => {
+          const cgpa = await getLatestCgpi(
+            student.username.toString().substring(0, 2),
+            student.username,
+          );
+
+          if (cgpa) {
+            return { username: student.username, cgpa };
+          }
+
+          return null;
+        }),
+      );
+
+      const filteredStudents = studentsWithCgpa.filter(
+        (student): student is { username: string; cgpa: number } =>
+          student !== null,
+      );
+
+      await Promise.all(
+        filteredStudents.map((student) =>
+          prisma.student.update({
+            where: { username: student.username, institutionId },
+            data: { cgpa: student.cgpa },
+          }),
+        ),
+      );
+      res.status(200).json({
+        msg: "cgpa updated successfully",
+      });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({
+        msg: "try again later",
+      });
+    }
+  },
+);
+
+adminRouter.put(
+  "/update/student/cgpa",
+  adminAuthMiddleware,
+  async (req: CustomExpressRequest, res) => {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(400).json({
+        msg: "sign in first",
+      });
+      return;
+    }
+    const isValid = adminUpdateCgpaSchema.safeParse(req.body);
+    if (!isValid.success) {
+      res.status(400).json({
+        msg: "invalid data",
+        errors: isValid.error.issues[0]?.message,
+      });
+      return;
+    }
+    const { rollNumber, institutionId, cgpa } = isValid.data;
+    try {
+      const admin = await prisma.admin.findFirst({
+        where: {
+          id: userId,
+        },
+      });
+
+      if (!admin) {
+        res.status(400).json({
+          msg: "unauthorized",
+        });
+        return;
+      }
+
+      if (admin.institutionId != institutionId) {
+        res.status(400).json({
+          msg: "unauthorized",
+        });
+        return;
+      }
+
+      const student = await prisma.student.findFirst({
+        where: {
+          username: rollNumber,
+          institutionId,
+        },
+      });
+      if (!student) {
+        res.status(400).json({
+          msg: "student not found",
+        });
+        return;
+      }
+      await prisma.student.update({
+        where: {
+          username: rollNumber.trim(),
+          institutionId,
+        },
+        data: {
+          cgpa,
+        },
+      });
+      res.status(200).json({
+        msg: "cgpa updated successfully",
+      });
+    } catch (error) {
+      res.status(500).json({
+        msg: "try again later",
+      });
+    }
+  },
+);
 
 adminRouter.post("/signin", async (req: Request, res: Response) => {
   const { email, password } = req.body;

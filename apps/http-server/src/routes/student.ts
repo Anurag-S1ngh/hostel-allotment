@@ -14,6 +14,7 @@ import {
   studentGetRoomSchema,
   studentInSchema,
   studentSignUpSchema,
+  studentUpdateCgpaSchema,
 } from "../zodSchema/student";
 
 export const studentRouter: Router = express.Router();
@@ -483,6 +484,69 @@ studentRouter.get(
       });
     } catch (error) {
       console.log(error);
+      res.status(500).json({
+        msg: "try again later",
+      });
+    }
+  },
+);
+
+studentRouter.put(
+  "/update/cgpa",
+  async (req: CustomExpressRequest, res: Response) => {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(400).json({
+        msg: "sign in first",
+      });
+      return;
+    }
+    const isValid = studentUpdateCgpaSchema.safeParse(req.body);
+    if (!isValid.success) {
+      res.status(400).json({
+        msg: "invalid data",
+        errors: isValid.error.issues[0]?.message,
+      });
+      return;
+    }
+    const { rollNumber, institutionId } = req.body;
+    try {
+      const student = await prisma.student.findFirst({
+        where: {
+          id: userId,
+          institutionId,
+        },
+      });
+
+      if (!student) {
+        res.status(400).json({
+          msg: "student not found",
+        });
+        return;
+      }
+      const cgpa = await getLatestCgpi(
+        rollNumber.toString().substring(0, 2),
+        rollNumber,
+      );
+      if (!cgpa) {
+        res.json({
+          msg: "invalid roll number",
+        });
+        return;
+      }
+      await prisma.student.update({
+        where: {
+          id: userId,
+          institutionId,
+        },
+        data: {
+          cgpa,
+        },
+      });
+      res.status(200).json({
+        msg: "cgpa updated successfully",
+      });
+    } catch (error) {
       res.status(500).json({
         msg: "try again later",
       });
